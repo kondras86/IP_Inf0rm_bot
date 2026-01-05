@@ -1,3 +1,4 @@
+import re
 import os
 import logging
 import requests
@@ -510,29 +511,111 @@ def get_virustotal_info(ip):
     except Exception as e:
         return f"2️⃣ *VirusTotal*: Ошибка — `{str(e)}`"
 
+def get_virustotal_url_info(url):
+    # VirusTotal требует, чтобы URL был закодирован в base64 (без padding)
+    import base64
+    encoded_url = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+    vt_url = f"https://www.virustotal.com/api/v3/urls/{encoded_url}"
+    headers = {"x-apikey": VT_API_KEY}
+
+    try:
+        r = requests.get(vt_url, headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json().get("data", {}).get("attributes", {})
+            last_analysis = data.get("last_analysis_stats", {})
+            malicious = last_analysis.get("malicious", 0)
+            suspicious = last_analysis.get("suspicious", 0)
+            harmless = last_analysis.get("harmless", 0)
+            total = sum(last_analysis.values())
+            reputation = data.get("reputation", 0)
+            categories = data.get("categories", [])
+            first_submission = data.get("first_submission_date")
+            last_analysis_date = data.get("last_analysis_date")
+
+            # Форматируем даты
+            from datetime import datetime
+            def fmt_ts(ts):
+                return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S UTC") if ts else "N/A"
+
+            malicious_emoji = "🔴" if malicious > 0 else "🟢"
+
+            return (
+                f"🌐 *VirusTotal (URL)*\n"
+                f"*Ссылка:* `{url}`\n"
+                f"*Репутация:* `{reputation}`\n"
+                f"*Вредоносная:* {malicious_emoji} `{malicious}` / `{total}`\n"
+                f"*Подозрительная:* ⚠️ `{suspicious}` / `{total}`\n"
+                f"*Безвредная:* ✅ `{harmless}` / `{total}`\n"
+                f"*Категории:* `{', '.join(categories) if categories else '—'}`\n"
+                f"*Первая проверка:* `{fmt_ts(first_submission)}`\n"
+                f"*Последняя проверка:* `{fmt_ts(last_analysis_date)}`\n"
+                f"[🔍 Посмотреть на VirusTotal](https://www.virustotal.com/gui/url/{encoded_url})"
+            )
+        elif r.status_code == 404:
+            # URL не найден — можно отправить на анализ
+            scan_url = "https://www.virustotal.com/api/v3/urls"
+            scan_headers = {"x-apikey": VT_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
+            scan_data = {"url": url}
+            scan_r = requests.post(scan_url, headers=scan_headers, data=scan_data, timeout=15)
+            if scan_r.status_code == 200:
+                scan_id = scan_r.json().get("data", {}).get("id")
+                return (
+                    f"🌐 *VirusTotal (URL)*\n"
+                    f"*Ссылка:* `{url}`\n"
+                    f"*Результат:* URL не найден в базе. Отправлен на анализ.\n"
+                    f"Результат будет доступен через несколько минут.\n"
+                    f"[🔍 Посмотреть позже на VirusTotal](https://www.virustotal.com/gui/url/{scan_id})"
+                )
+            else:
+                return (
+                    f"🌐 *VirusTotal (URL)*\n"
+                    f"*Ссылка:* `{url}`\n"
+                    f"*Результат:* URL не найден и не удалось отправить на анализ."
+                )
+        else:
+            return (
+                f"🌐 *VirusTotal (URL)*\n"
+                f"*Ссылка:* `{url}`\n"
+                f"*Результат:* Ошибка API ({r.status_code})"
+            )
+    except Exception as e:
+        return f"🌐 *VirusTotal (URL)*: Ошибка — `{str(e)}`"
+
 # === Обработчики Telegram ===
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Ваалейкум! Присылай ip-адрес и я закину тебе всю информацию о нем."
-    )
-
 async def handle_ip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ip = update.message.text.strip()
-    # Простая проверка IP
-    parts = ip.split('.')
-    if len(parts) != 4 or not all(part.isdigit() and 0 <= int(part) <= 255 for part in parts):
-        await update.message.reply_text("Чел, пришли плиз корректный IPv4-адрес.")
+    text = update.message.text.strip()
+
+    # Проверка на IP-адрес
+    ip_pattern = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+    if ip_pattern.match(text):
+        parts = text.split('.')
+        if all(0 <= int(part) <= 255 for part in parts):
+            msg = await update.message.reply_text("🔍 Запрашиваю информацию об IP...")
+            shodan = get_shodan_info(text)
+            abuse = get_abuseipdb_info(text)
+            vt = get_virustotal_info(text)
+            full_report = f"🔍 *Информация об IP `{text}`:*\n\n{abuse}\n\n{vt}\n\n{shodan}"
+            await msg.edit_text(full_report, parse_mode="Markdown", disable_web_page_preview=True)
+            return
+
+    # Проверка на URL
+    url_pattern = re.compile(
+        r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE
+    )
+    if url_pattern.match(text):
+        msg = await update.message.reply_text("🔍 Проверяю URL в VirusTotal...")
+        vt_url_report = get_virustotal_url_info(text)
+        await msg.edit_text(vt_url_report, parse_mode="Markdown", disable_web_page_preview=True)
         return
 
-    msg = await update.message.reply_text("🔍 Ищу инфу, ща все будет...")
-
-    shodan = get_shodan_info(ip)
-    abuse = get_abuseipdb_info(ip)
-    vt = get_virustotal_info(ip)
-
-    full_report = f"🔍 *Информация об {ip}:*\n\n{abuse}\n\n{vt}\n\n{shodan}"
-    await msg.edit_text(full_report, parse_mode="Markdown", disable_web_page_preview=True)
+    # Если ни IP, ни URL
+    await update.message.reply_text(
+        "Пожалуйста, отправьте:\n"
+        "• IPv4-адрес (например, `8.8.8.8`), или\n"
+        "• Ссылку (например, `https://example.com`)"
+    )
 
 # === Запуск бота ===
 
