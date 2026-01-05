@@ -619,6 +619,13 @@ async def handle_ip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Запуск бота ===
 
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Привет! Отправьте:\n"
+        "• IPv4-адрес (например, `8.8.8.8`), или\n"
+        "• Ссылку (например, `https://example.com`)"
+    )
+
 def main():
     logging.basicConfig(level=logging.INFO)
     app = Application.builder().token(TELEGRAM_TOKEN).build()
