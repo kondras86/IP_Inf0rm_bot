@@ -546,7 +546,6 @@ def get_virustotal_url_info(url):
                 f"*Репутация:* `{reputation}`\n"
                 f"*Вредоносная:* {malicious_emoji} `{malicious}` / `{total}`\n"
                 f"*Подозрительная:* ⚠️ `{suspicious}` / `{total}`\n"
-                f"*Безвредная:* ✅ `{harmless}` / `{total}`\n"
                 f"*Категории:* `{', '.join(categories) if categories else '—'}`\n"
                 f"*Первая проверка:* `{fmt_ts(first_submission)}`\n"
                 f"*Последняя проверка:* `{fmt_ts(last_analysis_date)}`\n"
