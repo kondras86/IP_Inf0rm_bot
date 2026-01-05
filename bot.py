@@ -4,10 +4,15 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# === ВСТАВЬ СЮДА СВОИ API-КЛЮЧИ ===
-SHODAN_API_KEY = "SHODAN_API_KEY"
-ABUSEIPDB_API_KEY = "ABUSEIPDB_API_KEY"
-VT_API_KEY = "VT_API_KEY"
+# Получаем API-ключи из переменных окружения
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+SHODAN_API_KEY = os.getenv("SHODAN_API_KEY")
+ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
+VT_API_KEY = os.getenv("VT_API_KEY")
+
+# Проверка, что все ключи заданы
+if not all([TELEGRAM_TOKEN, SHODAN_API_KEY, ABUSEIPDB_API_KEY, VT_API_KEY]):
+    raise RuntimeError("Одна или несколько переменных окружения не заданы!")
 
 # === Функции запросов к API ===
 
@@ -96,8 +101,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_ip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ip = update.message.text.strip()
-    # Простая проверка IP (можно улучшить регуляркой)
-    if not (4 <= len(ip.split('.')) <= 4 and all(part.isdigit() and 0 <= int(part) <= 255 for part in ip.split('.'))):
+    # Простая проверка IP
+    parts = ip.split('.')
+    if len(parts) != 4 or not all(part.isdigit() and 0 <= int(part) <= 255 for part in parts):
         await update.message.reply_text("Пожалуйста, пришлите корректный IPv4-адрес.")
         return
 
@@ -114,8 +120,7 @@ async def handle_ip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    # Замени 'YOUR_TELEGRAM_BOT_TOKEN' на токен от @BotFather
-    app = Application.builder().token("TELEGRAM_TOKEN").build()
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_ip))
@@ -125,4 +130,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
