@@ -1,0 +1,13 @@
+ПРИМЕР!!!
+
+# Удали старый файл (если он отслеживается)
+git rm requirements.txt.txt
+
+# Добавь правильный
+git add requirements.txt
+
+# Сделай коммит
+git commit -m "Fix: rename requirements.txt.txt → requirements.txt"
+
+# Отправь
+git push origin main
